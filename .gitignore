@@ -36,3 +36,10 @@
 Icon?
 ehthumbs.db
 Thumbs.db
+
+# Tests and Vendor Folder #
+###########################
+composer.lock
+vendor/
+bin/
+spec/
