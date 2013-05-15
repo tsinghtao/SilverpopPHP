@@ -22,10 +22,11 @@ class ConnectorSpec extends ObjectBehavior
         $this->shouldHaveType('Silverpop\Util\Connector');
     }
 
-    function it_should_do_a_get_request()
+    function it_should_perform_a_post_request()
     {
-        $url = "http://www.google.com";
-        $this->connector->get($url)->willReturn("Hello Silverpop");
-        $this->get($url)->shouldReturn("Hello Silverpop");
+        $url    = "http://www.google.com";
+        $param  = array("foo" => "bar");
+        $this->connector->post($url, array(), Argument::any())->willReturn("Hello Silverpop");
+        $this->send($url, $param)->shouldReturn("Hello Silverpop");
     }
 }

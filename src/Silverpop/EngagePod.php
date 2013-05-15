@@ -2,7 +2,6 @@
 
 namespace Silverpop;
 
-use Silverpop\Util\Serializer;
 use Silverpop\Util\Connector;
 
 class EngagePod {
@@ -16,27 +15,55 @@ class EngagePod {
      */
     const VERSION = '1.0.0';
 
-    private $_baseUrl;
-    private $_session_encoding;
-    private $_jsessionid;
-    private $_username;
-    private $_password;
+    private $config;
 
-    private $serializer;
+    private $baseUrl;
+    private $session_encoding;
+    private $jsessionid;
+
     private $connector;
 
     /**
      * Constructor
-     * 
-     * Sets $this->_baseUrl based on the engage server specified in config
+     *
+     * Sets $this->baseUrl based on the engage server specified in config
      */
-    public function __construct($config, $serializer=null, $connector=null) {
+    public function __construct(array $config, $serializer=null, $connector=null) {
+      $this->config    = $config;
+      $this->connector = $connector ?: new Connector();
+      $this->init();
+    }
 
-        // It would be a good thing to cache the jsessionid somewhere and reuse it across multiple requests
-        // otherwise we are authenticating to the server once for every request
-        $this->_baseUrl = 'http://api' . $config['engage_server'] . '.silverpop.com/XMLAPI';
-        $this->_login($config['username'], $config['password']);
+    private function init() {
+      if( !isset($this->config["username"])
+       || !isset($this->config["password"])
+       || !isset($this->config["engage_server"]) ) {
+        throw new \Exception("Incorrect constructor");
+      }
 
+      if( isset($this->config["baseUrl"]) ) $this->baseUrl = $this->config["baseUrl"];
+      else $this->baseUrl = "http://api" . $this->config["engage_server"] . ".silverpop.com/XMLAPI";
+
+      $this->jsessionid = $this->getJSessionId($this->config["username"], $this->config["password"]);
+    }
+
+    /**
+     * Private method: authenticate with Silverpop
+     *
+     */
+    private function getJSessionId($username, $password) {
+      $data = array(
+        "Body" => array(
+          "Login" => array(
+            "USERNAME" => $username,
+            "PASSWORD" => $password,
+          ),
+        )
+      );
+
+      $response = $this->connector->send($this->baseUrl, $data);
+      //$result = $response["Envelope"]["Body"]["RESULT"];
+      var_dump($this->baseUrl, $data, $response);
     }
 
     /**
@@ -601,30 +628,6 @@ class EngagePod {
 
     }
 
-    /**
-     * Private method: authenticate with Silverpop
-     *
-     */
-    private function _login($username, $password) {
-        $data["Envelope"] = array(
-            "Body" => array(
-                "Login" => array(
-                    "USERNAME" => $username,
-                    "PASSWORD" => $password,
-                ),
-            ),
-        );
-        $response = $this->_request($data);
-        $result = $response["Envelope"]["Body"]["RESULT"];
-        if ($this->_isSuccess($result)) {
-            $this->_jsessionid = $result['SESSIONID'];
-            $this->_session_encoding = $result['SESSION_ENCODING'];
-            $this->_username = $username;
-            $this->_password = $password;
-        } else {
-            throw new \Exception("Login Error: ".$this->_getErrorFromResponse($response));
-        }
-    }
 
     /**
      * Private method: generate the full request url
