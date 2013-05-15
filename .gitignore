@@ -42,4 +42,3 @@ Thumbs.db
 composer.lock
 vendor/
 bin/
-spec/

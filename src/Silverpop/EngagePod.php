@@ -2,7 +2,8 @@
 
 namespace Silverpop;
 
-use Silverpop\Util\ArrayToXML;
+use Silverpop\Util\Serializer;
+use Silverpop\Util\Connector;
 
 class EngagePod {
 
@@ -13,7 +14,7 @@ class EngagePod {
      *
      * @const string VERSION
      */
-    const VERSION = '0.0.2';
+    const VERSION = '1.0.0';
 
     private $_baseUrl;
     private $_session_encoding;
@@ -21,12 +22,15 @@ class EngagePod {
     private $_username;
     private $_password;
 
+    private $serializer;
+    private $connector;
+
     /**
      * Constructor
      * 
      * Sets $this->_baseUrl based on the engage server specified in config
      */
-    public function __construct($config) {
+    public function __construct($config, $serializer=null, $connector=null) {
 
         // It would be a good thing to cache the jsessionid somewhere and reuse it across multiple requests
         // otherwise we are authenticating to the server once for every request

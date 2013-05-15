@@ -16,7 +16,7 @@ class Serializer
 
   public function serialize(array $array) {
     // Array -> XML
-    return Array2XML::createXML($this->default_root, $array)->saveXML();
+    return rtrim(Array2XML::createXML($this->default_root, $array)->saveXML());
   }
 
   public function unserialize($xml) {
