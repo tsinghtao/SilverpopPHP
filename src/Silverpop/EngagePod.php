@@ -28,7 +28,7 @@ class EngagePod {
      *
      * Sets $this->baseUrl based on the engage server specified in config
      */
-    public function __construct(array $config, $serializer=null, $connector=null) {
+    public function __construct(array $config, $connector=null) {
       $this->config    = $config;
       $this->connector = $connector ?: new Connector();
       $this->init();
@@ -47,10 +47,6 @@ class EngagePod {
       $this->jsessionid = $this->getJSessionId($this->config["username"], $this->config["password"]);
     }
 
-    /**
-     * Private method: authenticate with Silverpop
-     *
-     */
     private function getJSessionId($username, $password) {
       $data = array(
         "Body" => array(
@@ -68,7 +64,7 @@ class EngagePod {
 
     /**
      * Fetches the contents of a list
-     * 
+     *
      * $listType can be one of:
      *
      * 0 - Databases

@@ -25,8 +25,18 @@ class EngagePodSpec extends ObjectBehavior
     function it_is_initializable()
     {
         $return = <<<XML
+<Envelope>
+  <Body>
+    <RESULT>
+      <SUCCESS>true</SUCCESS>
+      <SESSIONID>dc302149861088513512481</SESSIONID>
+      <SESSION_ENCODING>;jsessionid=dc302149861088513512481</SESSION_ENCODING>
+    </RESULT>
+  </Body>
+</Envelope>
 XML;
-        $this->connector->send(Argument::cetera())->willReturn();
+        $this->connector->send(Argument::cetera())->shouldBeCalled();
+        $this->connector->send(Argument::cetera())->willReturn($return);
         $this->shouldHaveType('Silverpop\EngagePod');
     }
 

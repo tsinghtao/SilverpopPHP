@@ -16,6 +16,18 @@ class Connector
 
   public function send($url, array $param) {
     $param = $this->serializer->serialize($param);
-    return $this->connector->post($url, array(), $param);
+    return $this->serializer->unserialize($this->connector->post($url, array(), $param));
+  }
+
+  public function login($url, $username, $password) {
+    $data = array(
+      "Body" => array(
+        "Login" => array(
+          "USERNAME" => $username,
+          "PASSWORD" => $password,
+        ),
+      )
+    );
+    return $this->send($url, $data);
   }
 }
