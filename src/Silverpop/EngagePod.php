@@ -3,249 +3,251 @@
 namespace Silverpop;
 
 use Silverpop\Util\Connector;
+use Silverpop\Util\Serializer;
 
 class EngagePod {
 
-    /**
-     * Current version of the library
-     *
-     * Uses semantic versioning (http://semver.org/)
-     *
-     * @const string VERSION
-     */
-    const VERSION = '1.0.0';
+	private $config;
 
-    private $config;
+	private $baseUrl;
+	private $session_encoding;
+	private $jsessionid;
 
-    private $baseUrl;
-    private $session_encoding;
-    private $jsessionid;
+	private $connector;
+	private $serializer;
 
-    private $connector;
+	public function __construct(array $config, $connector = null, $serializer = null) {
+		$this->config    = $config;
+		$this->connector = $connector ?: new Connector();
+		$this->serializer = $serializer ?: new Serializer();
+		$this->jsessionid = $this->login();
+	}
 
-    /**
-     * Constructor
-     *
-     * Sets $this->baseUrl based on the engage server specified in config
-     */
-    public function __construct(array $config, $connector=null) {
-      $this->config    = $config;
-      $this->connector = $connector ?: new Connector();
-      $this->init();
-    }
+	private function login() {
+		if( !isset($this->config["username"])
+			|| !isset($this->config["password"])
+			|| !isset($this->config["engage_server"]) ) {
+				throw new \Exception("Incorrect constructor");
+			}
 
-    private function init() {
-      if( !isset($this->config["username"])
-       || !isset($this->config["password"])
-       || !isset($this->config["engage_server"]) ) {
-        throw new \Exception("Incorrect constructor");
-      }
+		if( isset($this->config["baseUrl"]) ) $this->baseUrl = $this->config["baseUrl"];
+		else $this->baseUrl = "http://api" . $this->config["engage_server"] . ".silverpop.com/XMLAPI";
 
-      if( isset($this->config["baseUrl"]) ) $this->baseUrl = $this->config["baseUrl"];
-      else $this->baseUrl = "http://api" . $this->config["engage_server"] . ".silverpop.com/XMLAPI";
+		$data = $this->serializer->serialize(array(
+			"Body" => array(
+				"Login" => array(
+					"USERNAME" => $this->config["username"],
+					"PASSWORD" => $this->config["password"],
+				),
+			)
+		));
 
-      $this->jsessionid = $this->getJSessionId($this->config["username"], $this->config["password"]);
-    }
+		$login = $this->serializer->unserialize($this->connector->send($this->baseUrl, $data));
+		if( "true" === $login["Envelope"]["Body"]["RESULT"]["SUCCESS"] ) {
+			return $login["Envelope"]["Body"]["RESULT"]["SESSIONID"];
+		}
+	}
 
-    private function getJSessionId($username, $password) {
-      $data = array(
-        "Body" => array(
-          "Login" => array(
-            "USERNAME" => $username,
-            "PASSWORD" => $password,
-          ),
-        )
-      );
+	/**
+	 * Fetches the contents of a list
+	 *
+	 * $listType can be one of:
+	 *
+	 * 0 - Databases
+	 * 1 - Queries
+	 * 2 - Both Databases and Queries
+	 * 5 - Test Lists
+	 * 6 - Seed Lists
+	 * 13 - Suppression Lists
+	 * 15 - Relational Tables
+	 * 18 - Contact Lists
+	 *
+	 */
+	public function getLists($listType = 2, $isPrivate = true, $folder = null) {
+		$data = array(
+			"Body" => array(
+				"GetLists" => array(
+					"VISIBILITY" => ($isPrivate ? '0' : '1'),
+					"FOLDER_ID" => $folder,
+					"LIST_TYPE" => $listType,
+				),
+			),
+		);
 
-      $response = $this->connector->send($this->baseUrl, $data);
-      //$result = $response["Envelope"]["Body"]["RESULT"];
-      var_dump($this->baseUrl, $data, $response);
-    }
+		$send_data = array(
+			"jsessionid" => $this->jsessionid,
+			"xml" => $this->serializer->serialize($data)
+		);
+		$response = $this->serializer->unserialize($this->connector->send($this->baseUrl, $send_data));
 
-    /**
-     * Fetches the contents of a list
-     *
-     * $listType can be one of:
-     *
-     * 0 - Databases
-     * 1 - Queries
-     * 2 - Both Databases and Queries
-     * 5 - Test Lists
-     * 6 - Seed Lists
-     * 13 - Suppression Lists
-     * 15 - Relational Tables
-     * 18 - Contact Lists
-     *
-     */
-    public function getLists($listType = 2, $isPrivate = true, $folder = null) {
-        $data["Envelope"] = array(
-            "Body" => array(
-                "GetLists" => array(
-                    "VISIBILITY" => ($isPrivate ? '0' : '1'),
-                    "FOLDER_ID" => $folder,
-                    "LIST_TYPE" => $listType,
-                ),
-            ),
-        );
-        $response = $this->_request($data);
-        $result = $response["Envelope"]["Body"]["RESULT"];
-        if ($this->_isSuccess($result)) {
-            if (isset($result['LIST']))
-                return $result['LIST'];
-            else {
-                return array(); //?
-            }
-        } else {
-            throw new \Exception("GetLists Error: ".$this->_getErrorFromResponse($response));
-        }
-    }
+		if ( "TRUE" === $response["Envelope"]["Body"]["RESULT"]["SUCCESS"] ) {
+			if ( isset( $response["Envelope"]["Body"]["RESULT"]["SUCCESS"] ) ) {
+				return $response["Envelope"]["Body"]["RESULT"]['LIST'];
+			}
+			else return array();
+		} else {
+			throw new \Exception("GetLists Error: ".$this->_getErrorFromResponse($response));
+		}
+	}
 
-    /**
-     * Get mailing templates
-     *
-     */
-    public function getMailingTemplates($isPrivate = true) {
-        $data["Envelope"] = array(
-            "Body" => array(
-                "GetMailingTemplates" => array(
-                    "VISIBILITY" => ($isPrivate ? '0' : '1'),
-                ),
-            ),
-        );
-        $response = $this->_request($data);
-        $result = $response["Envelope"]["Body"]["RESULT"];
-        if ($this->_isSuccess($result)) {
-            if (isset($result['MAILING_TEMPLATE']))
-                return $result['MAILING_TEMPLATE'];
-            else {
-                return array(); //?
-            }
-        } else {
-            throw new Exception("GetLists Error: ".$this->_getErrorFromResponse($response));
-        }
-    }
+	public function getMailingTemplates($isPrivate = true) {
+		$data = array(
+			"Body" => array(
+				"GetMailingTemplates" => array(
+					"VISIBILITY" => ($isPrivate ? '0' : '1'),
+				),
+			),
+		);
 
-    /**
-     * Calculate a query
-     * 
-     */
-    public function calculateQuery($databaseID) {
-        $data["Envelope"] = array(
-            "Body" => array(
-                "CalculateQuery" => array(
-                    "QUERY_ID" => $databaseID,
-                ),
-            ),
-        );
-        $response = $this->_request($data);
-        $result = $response["Envelope"]["Body"]["RESULT"];
-        if ($this->_isSuccess($result)) {
-            return $result["JOB_ID"];
-        } else {
-            throw new Exception("Silverpop says: ".$response["Envelope"]["Body"]["Fault"]["FaultString"]);
-        }
-    }
+		$send_data = array(
+			"jsessionid" => $this->jsessionid,
+			"xml" => $this->serializer->serialize($data)
+		);
+		$response = $this->serializer->unserialize($this->connector->send($this->baseUrl, $send_data));
 
-    /**
-     * Get scheduled mailings
-     * 
-     */
-    public function getScheduledMailings() {
-        $data['Envelope'] = array(
-            'Body' => array(
-                'GetSentMailingsForOrg' => array(
-                    'SCHEDULED' => null,
-                ),
-            ),
-        );
-        $response = $this->_request($data);
-        $result = $response["Envelope"]["Body"]["RESULT"];
-        if ($this->_isSuccess($result)) {
-            return $result;
-        } else {
-            throw new Exception("Silverpop says: ".$response["Envelope"]["Body"]["Fault"]["FaultString"]);
-        }
-    }
+		if ( "TRUE" === $response["Envelope"]["Body"]["RESULT"]["SUCCESS"] ) {
+			if ( isset( $response["Envelope"]["Body"]["RESULT"]["SUCCESS"] ) ) {
+				return $response["Envelope"]["Body"]["RESULT"]['MAILING_TEMPLATE'];
+			}
+			else return array();
+		} else {
+			throw new \Exception("GetLists Error: ".$this->_getErrorFromResponse($response));
+		}
+	}
 
-    /**
-     * Get the meta information for a list
-     * 
-     */
-    public function getListMetaData($databaseID) {
-        $data["Envelope"] = array(
-            "Body" => array(
-                "GetListMetaData" => array(
-                    "LIST_ID" => $databaseID,
-                ),
-            ),
-        );
-        $response = $this->_request($data);
-        $result = $response["Envelope"]["Body"]["RESULT"];
-        if ($this->_isSuccess($result)) {
-            return $result;
-        } else {
-            throw new Exception("Silverpop says: ".$response["Envelope"]["Body"]["Fault"]["FaultString"]);
-        }
-    }
-    
-    /**
-     * Remove a contact
-     * 
-     */
-    public function removeContact($databaseID, $email, $customer_id) {
-        $data["Envelope"] = array(
-            "Body" => array(
-                "RemoveRecipient" => array(
-                    "LIST_ID" => $databaseID,
-                    "EMAIL" => $email,
-                    "COLUMN" => array(array("NAME"=>"customer_id", "VALUE"=>$customer_id)),
-                ),
-            ),
-        );
-        $response = $this->_request($data);
-        $result = $response["Envelope"]["Body"]["RESULT"];
-        if ($this->_isSuccess($result)) {
-            return true;
-        } else {
-            if ($response["Envelope"]["Body"]["Fault"]["FaultString"]=="Error removing recipient from list. Recipient is not a member of this list."){
-                return true;
-            } else {
-                throw new Exception("Silverpop says: ".$response["Envelope"]["Body"]["Fault"]["FaultString"]);
-            }
-        }
-    }
-    
-    /**
-     * Add a contact to a list
-     * 
-     */
-    public function addContact($databaseID, $updateIfFound, $columns) {
-        $data["Envelope"] = array(
-            "Body" => array(
-                "AddRecipient" => array(
-                    "LIST_ID" => $databaseID,
-                    "CREATED_FROM" => 1,         // 1 = created manually, 2 = opted in
-                    // "SEND_AUTOREPLY"  => 'true',
-                    "UPDATE_IF_FOUND" => ($updateIfFound ? 'true' : 'false'),
-                    "COLUMN" => array(),
-                ),
-            ),
-        );
-        foreach ($columns as $name => $value) {
-            $data["Envelope"]["Body"]["AddRecipient"]["COLUMN"][] = array("NAME" => $name, "VALUE" => $value);
-        }
-        $response = $this->_request($data);
-        $result = $response["Envelope"]["Body"]["RESULT"];
-        if ($this->_isSuccess($result)) {
-            if (isset($result['RecipientId']))
-                return $result['RecipientId'];
-            else {
-                throw new \Exception('Recipient added but no recipient ID was returned from the server.');
-            }
-        } else {
-            throw new \Exception("AddRecipient Error: ".$this->_getErrorFromResponse($response));
-        }
-    }
+	public function calculateQuery($databaseID) {
+		$data = array(
+			"Body" => array(
+				"CalculateQuery" => array(
+					"QUERY_ID" => $databaseID,
+				),
+			),
+		);
+
+		$send_data = array(
+			"jsessionid" => $this->jsessionid,
+			"xml" => $this->serializer->serialize($data)
+		);
+		$response = $this->serializer->unserialize($this->connector->send($this->baseUrl, $send_data));
+
+		if ( "TRUE" === $response["Envelope"]["Body"]["RESULT"]["SUCCESS"] ) {
+			if ( isset( $response["Envelope"]["Body"]["RESULT"]["SUCCESS"] ) ) {
+				return $response["Envelope"]["Body"]["RESULT"]['JOB_ID'];
+			}
+			else return array();
+		} else {
+			throw new \Exception("GetLists Error: ".$this->_getErrorFromResponse($response));
+		}
+	}
+
+	public function getScheduledMailings() {
+		$data = array(
+			'Body' => array(
+				'GetSentMailingsForOrg' => array(
+					'SCHEDULED' => null,
+				),
+			),
+		);
+
+		$send_data = array(
+			"jsessionid" => $this->jsessionid,
+			"xml" => $this->serializer->serialize($data)
+		);
+		$response = $this->serializer->unserialize($this->connector->send($this->baseUrl, $send_data));
+
+		if ( "TRUE" === $response["Envelope"]["Body"]["RESULT"]["SUCCESS"] ) {
+			if ( isset( $response["Envelope"]["Body"]["RESULT"]["SUCCESS"] ) ) {
+				return $response;
+			}
+			else return array();
+		} else {
+			throw new \Exception("GetLists Error: ".$this->_getErrorFromResponse($response));
+		}
+	}
+
+	public function getListMetaData($databaseID) {
+		$data["Envelope"] = array(
+			"Body" => array(
+				"GetListMetaData" => array(
+					"LIST_ID" => $databaseID,
+				),
+			),
+		);
+
+		$send_data = array(
+			"jsessionid" => $this->jsessionid,
+			"xml" => $this->serializer->serialize($data)
+		);
+		$response = $this->serializer->unserialize($this->connector->send($this->baseUrl, $send_data));
+
+		if ( "TRUE" === $response["Envelope"]["Body"]["RESULT"]["SUCCESS"] ) {
+			if ( isset( $response["Envelope"]["Body"]["RESULT"]["SUCCESS"] ) ) {
+				return $response["Envelope"]["Body"]["RESULT"];
+			}
+			else return array();
+		} else {
+			throw new \Exception("GetLists Error: ".$this->_getErrorFromResponse($response));
+		}
+	}
+
+	public function removeContact($databaseID, $email, $customer_id) {
+		$data = array(
+			"Body" => array(
+				"RemoveRecipient" => array(
+					"LIST_ID" => $databaseID,
+					"EMAIL" => $email,
+					"COLUMN" => array(array("NAME"=>"customer_id", "VALUE"=>$customer_id)),
+				),
+			),
+		);
+
+		$send_data = array(
+			"jsessionid" => $this->jsessionid,
+			"xml" => $this->serializer->serialize($data)
+		);
+		$response = $this->serializer->unserialize($this->connector->send($this->baseUrl, $send_data));
+
+		if ( "TRUE" === $response["Envelope"]["Body"]["RESULT"]["SUCCESS"] ) {
+			if ( isset( $response["Envelope"]["Body"]["RESULT"]["SUCCESS"] ) ) {
+				return true;
+			}
+			else return array();
+		} else {
+			throw new \Exception("GetLists Error: ".$this->_getErrorFromResponse($response));
+		}
+	}
+
+	public function addContact($databaseID, $updateIfFound, $columns) {
+		$data = array(
+			"Body" => array(
+				"AddRecipient" => array(
+					"LIST_ID" => $databaseID,
+					"CREATED_FROM" => 1,         // 1 = created manually, 2 = opted in
+					// "SEND_AUTOREPLY"  => 'true',
+					"UPDATE_IF_FOUND" => ($updateIfFound ? 'true' : 'false'),
+					"COLUMN" => array(),
+				),
+			),
+		);
+		foreach ($columns as $name => $value) {
+			$data["Body"]["AddRecipient"]["COLUMN"][] = array("NAME" => $name, "VALUE" => $value);
+		}
+
+		$send_data = array(
+			"jsessionid" => $this->jsessionid,
+			"xml" => $this->serializer->serialize($data)
+		);
+		$response = $this->serializer->unserialize($this->connector->send($this->baseUrl, $send_data));
+
+		if ( "TRUE" === $response["Envelope"]["Body"]["RESULT"]["SUCCESS"] ) {
+			if ( isset( $response["Envelope"]["Body"]["RESULT"]["SUCCESS"] ) ) {
+				return $response["Envelope"]["Body"]["RESULT"]["RecipientId"];
+			}
+			else return array();
+		} else {
+			throw new \Exception("GetLists Error: ".$this->_getErrorFromResponse($response));
+		}
+	}
 
     public function getContact($databaseID, $email)
     {
